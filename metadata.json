@@ -1,0 +1,6 @@
+{
+  "name": "Velocity Dash Pro - Cyber Runner",
+  "description": "High-octane endless cyber runner with customizable heroes, rich environments, upgrades, dynamic power-ups, and synthesized audio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
