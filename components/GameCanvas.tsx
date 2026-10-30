@@ -203,7 +203,8 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
   // Reset Game
   const resetGame = useCallback(() => {
     const char = CHARACTERS[characterId];
-    const initialShield = char.id === 'volt' || upgrades.shieldDuration > 0;
+    const upg = upgradesRef.current;
+    const initialShield = char.id === 'volt' || upg.shieldDuration > 0;
     const gY = stateRef.current.groundY;
 
     stateRef.current.score = 0;
@@ -218,7 +219,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
     stateRef.current.shieldActive = initialShield;
     stateRef.current.magnetTimer = 0;
     stateRef.current.boostTimer = 0;
-    stateRef.current.maxPowerUpDuration = 320 + upgrades.boostDuration * 60;
+    stateRef.current.maxPowerUpDuration = 320 + upg.boostDuration * 60;
 
     stateRef.current.player = {
       x: 140,
@@ -243,7 +244,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
     stateRef.current.obstacleTimer = 0;
     stateRef.current.orbTimer = 0;
     stateRef.current.powerUpTimer = 0;
-  }, [characterId, upgrades]);
+  }, [characterId]);
 
   // Touch & Pointer Gesture Listeners:
   // 1 touch = normal jump
@@ -383,6 +384,14 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
     };
   }, [isRunning, isPaused, performJump, performDuck]);
 
+  // Keep props in refs so loop doesn't re-instantiate or hold stale closures
+  const onScoreUpdateRef = useRef(onScoreUpdate);
+  onScoreUpdateRef.current = onScoreUpdate;
+  const onGameOverRef = useRef(onGameOver);
+  onGameOverRef.current = onGameOver;
+  const upgradesRef = useRef(upgrades);
+  upgradesRef.current = upgrades;
+
   // Main 60fps Animation Loop with Dynamic Full-screen Canvas Resolution
   useEffect(() => {
     if (!isRunning) return;
@@ -402,10 +411,10 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
       const rect = canvas.getBoundingClientRect();
       const w = Math.max(800, Math.floor(rect.width));
       const h = Math.max(450, Math.floor(rect.height));
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap at 2 to prevent GPU fill-rate stalling
 
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
       ctx.resetTransform?.();
       ctx.scale(dpr, dpr);
 
@@ -419,6 +428,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
     window.addEventListener('resize', updateCanvasSize);
 
     let lastFrameTime = performance.now();
+    let lastHudUpdateTime = 0;
 
     const loop = (time: number) => {
       animId = requestAnimationFrame(loop);
@@ -449,7 +459,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
       state.distanceTraveled += effectiveSpeed * 0.1 * dt;
 
       // Score
-      const multiplier = 1 + upgrades.scoreMultiplier * 0.25 + (character.id === 'cipher' ? 0.25 : 0);
+      const multiplier = 1 + upgradesRef.current.scoreMultiplier * 0.25 + (character.id === 'cipher' ? 0.25 : 0);
       state.score += 0.28 * state.currentLevel * multiplier * dt;
 
       // Level progression
@@ -514,9 +524,9 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
 
       p.animTimer += dt * (effectiveSpeed / 6.8);
 
-      // Trail Ghosts
+      // Trail Ghosts (capped to max 12)
       if (isBoosting || state.currentLevel >= 4) {
-        if (Math.random() < 0.6) {
+        if (Math.random() < 0.6 && p.trailGhosts.length < 12) {
           p.trailGhosts.push({
             x: p.x,
             y: p.y,
@@ -525,6 +535,14 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
             animTimer: p.animTimer,
           });
         }
+      }
+
+      // Safeguard particle bounds (max 60 general particles, max 25 dust particles)
+      if (state.particles.length > 60) {
+        state.particles.splice(0, state.particles.length - 60);
+      }
+      if (p.dustParticles.length > 25) {
+        p.dustParticles.splice(0, p.dustParticles.length - 25);
       }
 
       // Update Particles
@@ -619,7 +637,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
       }
 
       // Update Orbs & Magnet Pull
-      const magnetRange = 130 + upgrades.magnetRadius * 55;
+      const magnetRange = 130 + upgradesRef.current.magnetRadius * 55;
       const hasMagnet = state.magnetTimer > 0;
 
       for (let i = state.orbs.length - 1; i >= 0; i--) {
@@ -689,7 +707,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
           soundFX.playPowerUp();
           if (item.type === 'shield') state.shieldActive = true;
           else if (item.type === 'magnet') state.magnetTimer = state.maxPowerUpDuration;
-          else if (item.type === 'boost') state.boostTimer = 180 + upgrades.boostDuration * 60;
+          else if (item.type === 'boost') state.boostTimer = 180 + upgradesRef.current.boostDuration * 60;
 
           for (let k = 0; k < 16; k++) {
             state.particles.push({
@@ -774,7 +792,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
 
           // Game over
           soundFX.playHit();
-          onGameOver({
+          onGameOverRef.current({
             score: Math.floor(state.score),
             level: state.currentLevel,
             orbs: state.orbsCollected,
@@ -794,29 +812,32 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
         if (pt.alpha <= 0) state.particles.splice(i, 1);
       }
 
-      // HUD Callback
-      let activePowerUp: 'shield' | 'magnet' | 'boost' | null = null;
-      let powerUpRatio = 0;
-      if (isBoosting) {
-        activePowerUp = 'boost';
-        powerUpRatio = state.boostTimer / (180 + upgrades.boostDuration * 60);
-      } else if (state.magnetTimer > 0) {
-        activePowerUp = 'magnet';
-        powerUpRatio = state.magnetTimer / state.maxPowerUpDuration;
-      } else if (state.shieldActive) {
-        activePowerUp = 'shield';
-        powerUpRatio = 1;
-      }
+      // Throttle React HUD updates to ~10fps (every 90ms) to eliminate React re-render stutter
+      if (time - lastHudUpdateTime >= 90) {
+        lastHudUpdateTime = time;
+        let activePowerUp: 'shield' | 'magnet' | 'boost' | null = null;
+        let powerUpRatio = 0;
+        if (isBoosting) {
+          activePowerUp = 'boost';
+          powerUpRatio = state.boostTimer / (180 + upgradesRef.current.boostDuration * 60);
+        } else if (state.magnetTimer > 0) {
+          activePowerUp = 'magnet';
+          powerUpRatio = state.magnetTimer / state.maxPowerUpDuration;
+        } else if (state.shieldActive) {
+          activePowerUp = 'shield';
+          powerUpRatio = 1;
+        }
 
-      onScoreUpdate({
-        score: Math.floor(state.score),
-        level: state.currentLevel,
-        orbs: state.orbsCollected,
-        speed: Number((effectiveSpeed / 6.8).toFixed(1)),
-        combo: state.combo,
-        activePowerUp,
-        powerUpDurationRatio: powerUpRatio,
-      });
+        onScoreUpdateRef.current({
+          score: Math.floor(state.score),
+          level: state.currentLevel,
+          orbs: state.orbsCollected,
+          speed: Number((effectiveSpeed / 6.8).toFixed(1)),
+          combo: state.combo,
+          activePowerUp,
+          powerUpDurationRatio: powerUpRatio,
+        });
+      }
 
       // ==========================================
       // RENDERING CANVAS (Full Screen Edge-to-Edge)
@@ -913,7 +934,7 @@ export const GameCanvas = React.forwardRef<GameCanvasHandle, GameCanvasProps>(fu
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', updateCanvasSize);
     };
-  }, [isRunning, isPaused, characterId, scenarioId, upgrades, onGameOver, onScoreUpdate, resetGame]);
+  }, [isRunning, isPaused, characterId, scenarioId, resetGame]);
 
   // Distant Background
   function drawDistantScenery(

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { X, Check, Zap, Gauge, Wind } from 'lucide-react';
 import { CharacterId, CHARACTERS, CharacterDef } from '@/lib/gameTypes';
 import { soundFX } from '@/lib/audioEngine';
@@ -90,82 +90,6 @@ function CharacterCard({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Animated live preview in canvas
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animId: number;
-    let timer = 0;
-
-    const render = () => {
-      timer += 0.25;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const legCycle = Math.sin(timer);
-      const isMale = character.gender === 'male';
-      const mainColor = character.accentHex;
-      const clothColor = '#0f172a';
-      const skinColor = '#fcd34d';
-
-      ctx.save();
-      ctx.translate(18, 12);
-
-      // Head
-      ctx.fillStyle = skinColor;
-      ctx.beginPath();
-      ctx.arc(22, 12, 10, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Helmet / Hair
-      ctx.fillStyle = mainColor;
-      if (isMale) {
-        ctx.fillRect(11, 2, 22, 8);
-      } else {
-        ctx.beginPath();
-        ctx.arc(17, 8, 11, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillRect(2, 4, 16, 5); // Ponytail
-      }
-
-      // Visor
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(23, 10, 8, 4);
-
-      // Torso
-      ctx.fillStyle = clothColor;
-      ctx.beginPath();
-      ctx.roundRect(10, 24, 24, 28, 4);
-      ctx.fill();
-
-      ctx.strokeStyle = mainColor;
-      ctx.lineWidth = 2.5;
-      ctx.strokeRect(10, 24, 24, 28);
-
-      // Core
-      ctx.fillStyle = mainColor;
-      ctx.beginPath();
-      ctx.arc(22, 34, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Animated legs
-      const leg1Offset = legCycle * 10;
-      const leg2Offset = -legCycle * 10;
-      ctx.fillRect(12 + leg1Offset * 0.4, 52, 7, 22);
-      ctx.fillRect(22 + leg2Offset * 0.4, 52, 7, 22);
-
-      ctx.restore();
-
-      animId = requestAnimationFrame(render);
-    };
-
-    animId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animId);
-  }, [character]);
 
   return (
     <div

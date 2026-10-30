@@ -102,12 +102,14 @@ export default function HomePage() {
   };
 
   // Audio Toggle
-  const handleToggleSound = () => {
-    const next = !soundEnabled;
-    setSoundEnabled(next);
-    soundFX.setMuted(!next);
-    soundFX.setMusicMuted(!next);
-  };
+  const handleToggleSound = useCallback(() => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      soundFX.setMuted(!next);
+      soundFX.setMusicMuted(!next);
+      return next;
+    });
+  }, []);
 
   // Start / Restart Game
   const handleStartGame = useCallback(() => {
@@ -125,13 +127,13 @@ export default function HomePage() {
   }, [soundEnabled]);
 
   // Pause / Resume
-  const handleTogglePause = () => {
-    if (gameState === 'PLAYING') {
-      setGameState('PAUSED');
-    } else if (gameState === 'PAUSED') {
-      setGameState('PLAYING');
-    }
-  };
+  const handleTogglePause = useCallback(() => {
+    setGameState((prev) => {
+      if (prev === 'PLAYING') return 'PAUSED';
+      if (prev === 'PAUSED') return 'PLAYING';
+      return prev;
+    });
+  }, []);
 
   // Key shortcuts for Pause & Mute
   useEffect(() => {
@@ -146,7 +148,7 @@ export default function HomePage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, [gameState, handleTogglePause, handleToggleSound]);
 
   // Score HUD update callback from GameCanvas
   const handleScoreUpdate = useCallback(
